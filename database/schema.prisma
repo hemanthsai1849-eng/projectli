@@ -1,0 +1,135 @@
+// High-Frequency Betting Platform - Database Schema
+// Focus: Integrity (ACID compliance) and Transparency (Audit Trail)
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ---------------------------------------------------------
+// User Entities
+// ---------------------------------------------------------
+
+model User {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  username  String   @unique
+  balance   Decimal  @default(0.00) @db.Decimal(18, 8) 
+  // Storing precision balances reliably. PostgreSQL Decimal allows perfect mathematical operations via transactions.
+
+  clientSeed String? // An optional persistent client-side seed if they prefer not to rotate every game.
+
+  // --- Affiliate Logic ---
+  referralCode String  @unique @default(cuid()) // E.g., '540672' equivalent
+  referredById String? // ID of the user who referred them
+  referredBy   User?   @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals    User[]  @relation("UserReferrals")
+
+  bets        Bet[]
+  commissions Commission[]
+}
+
+// ---------------------------------------------------------
+// Affiliate / Commission Ledger
+// ---------------------------------------------------------
+
+model Commission {
+  id         String   @id @default(uuid())
+  createdAt  DateTime @default(now())
+  
+  userId     String   // The referrer who is receiving the cut
+  user       User     @relation(fields: [userId], references: [id])
+  
+  fromUserId String   // The downline user who placed the bet
+  betId      String   // The bet that triggered the commission
+  
+  amount     Decimal  @db.Decimal(18, 8) // Commission earned
+}
+
+// ---------------------------------------------------------
+// Game Flow Entities
+// ---------------------------------------------------------
+
+enum RoundStatus {
+  WAITING  // Timer > 5s: Accepting Bets
+  LOCKED   // Timer < 5s: Bets Rejected
+  RESULT   // Round calculation occurs (ServerSeed revealed)
+  PAYOUT   // Transaction settlement occurring
+  COMPLETE // Game finished
+}
+
+model Round {
+  id           String      @id @default(uuid())
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  
+  status       RoundStatus @default(WAITING)
+  
+  // Transparency: Commit-Reveal Materials
+  serverSeed   String      // The raw server seed (revealed *only* when LOCKED/RESULT starts)
+  seedHash     String      // The HMAC-SHA256 of serverSeed (published during WAITING)
+  nonce        Int         @default(0) // Usually incremented globally or per round type
+  
+  result       String?     // Outcome: E.g. 'Red', 'Black', 'Green' (or Number). 
+  
+  bets         Bet[]
+  auditLog     AuditLog?   // 1-to-1 strict relation: Every completed round gets one immutable token payload.
+}
+
+enum BetStatus {
+  PENDING
+  WON
+  LOST
+  REFUNDED
+}
+
+model Bet {
+  id           String    @id @default(uuid())
+  createdAt    DateTime  @default(now())
+  
+  // Audit & Verification Details
+  roundId      String
+  round        Round     @relation(fields: [roundId], references: [id])
+  
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  
+  amount       Decimal   @db.Decimal(18, 8) // Bet Value
+  payoutAmount Decimal?  @db.Decimal(18, 8) // Value won (null until finalized)
+  
+  // User's prediction (e.g. 'Red', 'Black')
+  prediction   String    
+
+  // This specific user's client seed for this round (if they provided one individually or global user seed)
+  clientSeed   String    
+  
+  status       BetStatus @default(PENDING)
+
+  @@index([roundId])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------
+// Audit Trail Module (Immutable Logs)
+// ---------------------------------------------------------
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  createdAt      DateTime @default(now())
+  
+  roundId        String   @unique
+  round          Round    @relation(fields: [roundId], references: [id])
+  
+  // The 'Audit Token' payload stored as JSON (for flexibility and ease of hashing)
+  // Contains timestamp, serverSeed, seedHash, and final calculated outcome.
+  tokenPayload   Json     
+  
+  // Cryptographic signature of the tokenPayload by the internal Audit Service to prove non-repudiation
+  systemSignature String   
+}
