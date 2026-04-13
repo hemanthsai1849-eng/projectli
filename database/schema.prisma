@@ -21,6 +21,7 @@ model User {
   
   username  String   @unique
   balance   Decimal  @default(0.00) @db.Decimal(18, 8) 
+  tradeVolume Decimal @default(0.00) @db.Decimal(18, 8)
   // Storing precision balances reliably. PostgreSQL Decimal allows perfect mathematical operations via transactions.
 
   clientSeed String? // An optional persistent client-side seed if they prefer not to rotate every game.
@@ -101,6 +102,7 @@ model Bet {
   user         User      @relation(fields: [userId], references: [id])
   
   amount       Decimal   @db.Decimal(18, 8) // Bet Value
+  feeAmount    Decimal   @default(0.00) @db.Decimal(18, 8) // Service fee deducted
   payoutAmount Decimal?  @db.Decimal(18, 8) // Value won (null until finalized)
   
   // User's prediction (e.g. 'Red', 'Black')
