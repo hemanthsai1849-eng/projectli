@@ -46,8 +46,8 @@ export class GameLoopService extends EventEmitter {
   private tick() {
     this.timerSeconds--;
 
-    // 1. WAITING -> LOCKED (Timer < 5s)
-    if (this.state === 'WAITING' && this.timerSeconds <= 5 && this.timerSeconds > 0) {
+    // 1. WAITING -> LOCKED (Timer <= 8s)
+    if (this.state === 'WAITING' && this.timerSeconds <= 8 && this.timerSeconds > 0) {
       this.state = 'LOCKED';
       this.emitStateChange();
     }

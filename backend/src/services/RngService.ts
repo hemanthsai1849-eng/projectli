@@ -36,7 +36,7 @@ export class RngService {
    * @param nonce Integer representing the round sequence
    * @returns { color: string, number: number }
    */
-  public calculateResult(serverSeed: string, clientSeed: string, nonce: number): { color: string, number: number } {
+  public calculateResult(serverSeed: string, clientSeed: string, nonce: number): { number: number, colors: string[], size: string } {
     // 1. Combine components deterministically
     const message = `${clientSeed}:${nonce}`;
     
@@ -47,22 +47,60 @@ export class RngService {
     const partial = hash.substring(0, 8);
     const intValue = parseInt(partial, 16);
 
-    // 4. Extract a modulo distribution (e.g., Mod 100 for percentage distribution 0-99)
-    const resultNumber = intValue % 100;
+    // 4. Extract a modulo distribution 0-9
+    const resultNumber = intValue % 10;
 
-    // 5. Map to color based on distribution requirements
-    let color = '';
-    if (resultNumber === 0 || resultNumber >= 90) {
-      color = 'Green'; // 10% House Edge / Special outcome
-    } else if (resultNumber % 2 === 0) {
-      color = 'Red'; // Approx 45%
-    } else {
-      color = 'Black'; // Approx 45%
-    }
+    // 5. Map to colors
+    let colors: string[] = [];
+    if (resultNumber === 0) colors = ['Violet', 'Red'];
+    else if (resultNumber === 5) colors = ['Violet', 'Green'];
+    else if (resultNumber % 2 === 0) colors = ['Red']; // 2, 4, 6, 8
+    else colors = ['Green']; // 1, 3, 7, 9
+
+    // 6. Map to Big/Small
+    const size = resultNumber >= 5 ? 'BIG' : 'SMALL';
 
     return {
       number: resultNumber,
-      color
+      colors,
+      size
     };
+  }
+
+  /**
+   * Calculates the exact multiplier payout for a given prediction against the actual result.
+   */
+  public calculatePayoutMultiplier(prediction: string, result: { number: number, colors: string[], size: string }): number {
+    // Number predictions exactly match (0-9)
+    if (prediction.startsWith('Number ')) {
+      const predNum = parseInt(prediction.replace('Number ', ''));
+      if (predNum === result.number) return 9.0;
+      return 0;
+    }
+
+    // Size predictions match (BIG/SMALL)
+    if (prediction === 'BIG' || prediction === 'SMALL') {
+      if (prediction === result.size) return 2.0;
+      return 0;
+    }
+
+    // Color predictions
+    if (prediction === 'Violet') {
+      if (result.colors.includes('Violet')) return 4.5;
+      return 0;
+    }
+
+    if (prediction === 'Green' || prediction === 'Red') {
+      if (result.colors.includes(prediction)) {
+        // If it's a split color (0 or 5), the standard payout is reduced to 1.5x
+        if (result.colors.includes('Violet')) {
+          return 1.5;
+        }
+        return 2.0;
+      }
+      return 0;
+    }
+
+    return 0;
   }
 }

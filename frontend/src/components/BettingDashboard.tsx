@@ -28,6 +28,7 @@ export default function BettingDashboard() {
 
   const [amount, setAmount] = useState<string>('');
   const [isBetting, setIsBetting] = useState(false);
+  const [betProcessingTimer, setBetProcessingTimer] = useState<number | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
   // Derived state
@@ -56,13 +57,30 @@ export default function BettingDashboard() {
 
   const handleBet = async (color: 'Red' | 'Black' | 'Green') => {
     if (isLockedOut || !amount) return;
+    
+    const betAmount = parseInt(amount, 10);
+    if (isNaN(betAmount) || betAmount < 20 || betAmount > 1000) {
+      alert("Contract Money minimum is ₹20 and maximum is ₹1000");
+      return;
+    }
+
     setIsBetting(true);
-    // Simulate API POST /api/bets
+    setBetProcessingTimer(8);
+
+    const interval = setInterval(() => {
+      setBetProcessingTimer((prev) => {
+        if (prev && prev > 1) return prev - 1;
+        clearInterval(interval);
+        return null;
+      });
+    }, 1000);
+
+    // Simulate API POST /api/bets taking 8 seconds
     setTimeout(() => {
-      alert(`Successfully placed $${amount} on ${color}`);
+      alert(`Successfully placed ₹${betAmount} on ${color}`);
       setIsBetting(false);
       setAmount('');
-    }, 500);
+    }, 8000);
   };
 
   return (
@@ -112,21 +130,21 @@ export default function BettingDashboard() {
                 disabled={isLockedOut || isBetting}
                 className="bg-[#4CAF50] text-white py-3 rounded text-sm font-bold shadow-md transition-transform active:scale-95 disabled:opacity-50"
               >
-                Join Green
+                {isBetting ? `Wait ${betProcessingTimer}s` : 'Join Green'}
               </button>
               <button 
                 onClick={() => handleBet('Black')}
                 disabled={isLockedOut || isBetting}
                 className="bg-[#9C27B0] text-white py-3 rounded text-sm font-bold shadow-md transition-transform active:scale-95 disabled:opacity-50"
               >
-                Join Violet
+                {isBetting ? `Wait ${betProcessingTimer}s` : 'Join Violet'}
               </button>
               <button 
                 onClick={() => handleBet('Red')}
                 disabled={isLockedOut || isBetting}
                 className="bg-[#F44336] text-white py-3 rounded text-sm font-bold shadow-md transition-transform active:scale-95 disabled:opacity-50"
               >
-                Join Red
+                {isBetting ? `Wait ${betProcessingTimer}s` : 'Join Red'}
               </button>
             </div>
 
@@ -135,17 +153,23 @@ export default function BettingDashboard() {
               <label className="text-xs text-neutral-500 mb-1 block">Contract Money</label>
               <input 
                 type="number"
+                min="20"
+                max="1000"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 disabled={isLockedOut || isBetting}
-                placeholder="₹100"
+                placeholder="₹100 (Min: 20, Max: 1000)"
                 className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 font-mono text-white focus:outline-none focus:border-[#007AFF] transition-all disabled:opacity-50"
               />
-               {isLockedOut && (
+               {isBetting ? (
+                <p className="text-[#007AFF] text-xs mt-2 flex items-center gap-1">
+                  <Clock size={12} /> Processing your bet securely... ({betProcessingTimer}s)
+                </p>
+              ) : isLockedOut ? (
                 <p className="text-red-400 text-xs mt-2 flex items-center gap-1">
                   <AlertCircle size={12} /> Round computing securely.
                 </p>
-              )}
+              ) : null}
             </div>
 
             {/* Provably Fair History Block */}
